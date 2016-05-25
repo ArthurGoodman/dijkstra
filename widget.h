@@ -16,6 +16,11 @@ class Widget : public QWidget {
 
     QPoint *start, *end;
 
+    QVector<double> dist;
+    QVector<int> prev;
+
+    QVector<int> path;
+
 public:
     Widget(QWidget *parent = 0);
     ~Widget();
@@ -31,9 +36,13 @@ private:
     void drawPolygon(const QPolygon &poly, QPainter *p, QColor color, bool connect = false);
 
     void closePolygon();
+
+    void compute();
     void buildVisibilityGraph();
+    void dijkstra();
 
     bool isVertexConcave(const QPolygon &polygon, int index);
     bool lineSegmentsCross(const QPoint &a, const QPoint &b, const QPoint &c, const QPoint &d);
     bool isLineOfSight(const QPoint &a, const QPoint &b);
+    bool isPolygonClockwise(const QPolygon &polygon);
 };

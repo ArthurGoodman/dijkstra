@@ -42,25 +42,25 @@ void Widget::mousePressEvent(QMouseEvent *e) {
                 newPoint = new QPoint(e->pos());
         }
 
-        buildVisibilityGraph();
+        compute();
     } else if (e->buttons() & Qt::RightButton && newPoint == 0) {
         delete start;
         start = 0;
 
-        bool append = true;
+        bool outside = true;
 
         foreach (QPolygon polygon, polygons)
             if (polygon.containsPoint(e->pos(), Qt::WindingFill)) {
-                append = false;
+                outside = false;
                 break;
             }
 
-        if (append) {
+        if (outside) {
             start = new QPoint(e->pos());
             *end = e->pos();
         }
 
-        buildVisibilityGraph();
+        compute();
     }
 }
 
@@ -68,9 +68,18 @@ void Widget::mouseMoveEvent(QMouseEvent *e) {
     if (newPoint != 0)
         *newPoint = e->pos();
     else if (start != 0) {
-        *end = e->pos();
+        bool outside = true;
 
-        buildVisibilityGraph();
+        foreach (QPolygon polygon, polygons)
+            if (polygon.containsPoint(e->pos(), Qt::WindingFill)) {
+                outside = false;
+                break;
+            }
+
+        if (outside) {
+            *end = e->pos();
+            compute();
+        }
     }
 }
 
@@ -88,7 +97,7 @@ void Widget::keyPressEvent(QKeyEvent *e) {
         delete start;
         start = 0;
 
-        buildVisibilityGraph();
+        compute();
         break;
 
     case Qt::Key_R:
@@ -121,12 +130,17 @@ void Widget::paintEvent(QPaintEvent *) {
     drawPolygon(newPolygon, &p, Qt::blue, true);
 
     if (start != 0) {
-        p.setPen(QPen(Qt::cyan, 2));
-
-        p.drawLine(*start, *end);
-
         QPainterPath pp;
         pp.setFillRule(Qt::WindingFill);
+
+        pp.moveTo(*start);
+
+        for (int i = 0; i < path.size(); i++)
+            pp.lineTo(vertices[path[i]]);
+
+        p.strokePath(pp, QPen(Qt::blue, 2));
+
+        pp = QPainterPath();
 
         pp.addEllipse(*start, circleRadius, circleRadius);
         pp.addEllipse(*end, circleRadius, circleRadius);
@@ -177,13 +191,27 @@ void Widget::closePolygon() {
         }
     }
 
+    if (!isPolygonClockwise(newPolygon)) {
+        QPolygon reversed;
+
+        for (int i = newPolygon.size() - 1; i >= 0; i--)
+            reversed.append(newPolygon[i]);
+
+        newPolygon = reversed;
+    }
+
     polygons.append(newPolygon);
     newPolygon.clear();
 
     delete newPoint;
     newPoint = 0;
 
+    compute();
+}
+
+void Widget::compute() {
     buildVisibilityGraph();
+    dijkstra();
 }
 
 void Widget::buildVisibilityGraph() {
@@ -209,6 +237,62 @@ void Widget::buildVisibilityGraph() {
     for (int i = 0; i < vertices.size(); i++)
         for (int j = i; j < vertices.size(); j++)
             edges[i][j] = edges[j][i] = isLineOfSight(vertices[i], vertices[j]);
+}
+
+void Widget::dijkstra() {
+    if (polygons.isEmpty())
+        return;
+
+    dist.clear();
+    prev.clear();
+
+    QSet<int> q;
+
+    for (int i = 0; i < vertices.size(); i++) {
+        dist.append(INT_MAX);
+        prev.append(-1);
+
+        q.insert(i);
+    }
+
+    dist[0] = 0;
+
+    while (!q.isEmpty()) {
+        double minDist = INFINITY;
+        int u = -1;
+
+        foreach (int x, q)
+            if (dist[x] < minDist) {
+                minDist = dist[x];
+                u = x;
+            }
+
+        if (u == vertices.size() - 1)
+            break;
+
+        q.remove(u);
+
+        for (int v = 0; v < vertices.size(); v++) {
+            if (edges[u][v]) {
+                double alt = dist[u] + length(vertices[u], vertices[v]);
+
+                if (alt < dist[v]) {
+                    dist[v] = alt;
+                    prev[v] = u;
+                }
+            }
+        }
+    }
+
+    path.clear();
+    int u = vertices.size() - 1;
+
+    while (prev[u] != -1) {
+        path.push_front(u);
+        u = prev[u];
+    }
+
+    path.push_front(u);
 }
 
 bool Widget::isVertexConcave(const QPolygon &polygon, int vertex) {
@@ -263,4 +347,17 @@ bool Widget::isLineOfSight(const QPoint &a, const QPoint &b) {
     }
 
     return true;
+}
+
+bool Widget::isPolygonClockwise(const QPolygon &polygon) {
+    int sum = 0;
+
+    for (int i = 0; i < polygon.size(); i++) {
+        QPoint a = polygon[i];
+        QPoint b = polygon[(i + 1) % polygon.size()];
+
+        sum += (b.x() - a.x()) * (b.y() + a.y());
+    }
+
+    return sum < 0;
 }
