@@ -40,9 +40,9 @@ void Widget::mousePressEvent(QMouseEvent *e) {
 
             if (newPolygon.size() == 1)
                 newPoint = new QPoint(e->pos());
-        }
 
-        compute();
+            vertices.clear();
+        }
     } else if (e->buttons() & Qt::RightButton && newPoint == 0) {
         delete start;
         start = 0;
@@ -97,7 +97,10 @@ void Widget::keyPressEvent(QKeyEvent *e) {
         delete start;
         start = 0;
 
-        compute();
+        if (!polygons.isEmpty())
+            compute();
+        else
+            vertices.clear();
         break;
 
     case Qt::Key_R:
@@ -240,11 +243,12 @@ void Widget::buildVisibilityGraph() {
 }
 
 void Widget::dijkstra() {
-    if (polygons.isEmpty())
-        return;
-
+    path.clear();
     dist.clear();
     prev.clear();
+
+    if ((start != 0 && *start == *end))
+        return;
 
     QSet<int> q;
 
@@ -284,7 +288,6 @@ void Widget::dijkstra() {
         }
     }
 
-    path.clear();
     int u = vertices.size() - 1;
 
     while (prev[u] != -1) {
