@@ -32,7 +32,7 @@ void Widget::mousePressEvent(QMouseEvent *e) {
         delete start;
         start = 0;
 
-        if (length(newPolygon.first(), e->pos()) <= 2 * circleRadius) {
+        if (distance(newPolygon.first(), e->pos()) <= 2 * circleRadius) {
             if (newPolygon.size() > 2)
                 closePolygon();
         } else {
@@ -130,7 +130,7 @@ void Widget::paintEvent(QPaintEvent *) {
     foreach (QPolygon poly, polygons)
         drawPolygon(poly, &p, Qt::red);
 
-    drawPolygon(newPolygon, &p, Qt::blue, true);
+    drawPolygon(newPolygon, &p, Qt::blue, false);
 
     if (start != 0) {
         QPainterPath pp;
@@ -153,7 +153,7 @@ void Widget::paintEvent(QPaintEvent *) {
     }
 }
 
-double Widget::length(const QPoint &a, const QPoint &b) {
+double Widget::distance(const QPoint &a, const QPoint &b) {
     return std::sqrt(std::pow(a.x() - b.x(), 2) + std::pow(a.y() - b.y(), 2));
 }
 
@@ -163,16 +163,20 @@ void Widget::drawPolygon(const QPolygon &poly, QPainter *p, QColor color, bool c
 
     if (!poly.isEmpty()) {
         linePath.moveTo(poly.first());
-        circlePath.addEllipse(poly.first(), circleRadius, circleRadius);
+
+        if (!connect)
+            circlePath.addEllipse(poly.first(), circleRadius, circleRadius);
     }
 
     for (int i = 1; i < poly.size(); i++) {
         linePath.lineTo(poly.at(i));
-        circlePath.addEllipse(poly.at(i), circleRadius, circleRadius);
+
+        if (!connect)
+            circlePath.addEllipse(poly.at(i), circleRadius, circleRadius);
     }
 
     if (!poly.isEmpty())
-        linePath.lineTo(newPoint && connect ? *newPoint : poly.first());
+        linePath.lineTo(newPoint && !connect ? *newPoint : poly.first());
 
     if (newPoint != 0)
         circlePath.addEllipse(*newPoint, circleRadius, circleRadius);
@@ -278,7 +282,7 @@ void Widget::dijkstra() {
 
         for (int v = 0; v < vertices.size(); v++) {
             if (edges[u][v]) {
-                double alt = dist[u] + length(vertices[u], vertices[v]);
+                double alt = dist[u] + distance(vertices[u], vertices[v]);
 
                 if (alt < dist[v]) {
                     dist[v] = alt;

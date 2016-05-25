@@ -32,8 +32,8 @@ public:
     void paintEvent(QPaintEvent *e);
 
 private:
-    double length(const QPoint &a, const QPoint &b);
-    void drawPolygon(const QPolygon &poly, QPainter *p, QColor color, bool connect = false);
+    double distance(const QPoint &a, const QPoint &b);
+    void drawPolygon(const QPolygon &poly, QPainter *p, QColor color, bool connect = true);
 
     void closePolygon();
 
