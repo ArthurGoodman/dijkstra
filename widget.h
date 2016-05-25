@@ -5,12 +5,16 @@
 class Widget : public QWidget {
     Q_OBJECT
 
+    const static int circleRadius = 4;
+
     QList<QPolygon> polygons;
     QPolygon newPolygon;
     QPoint *newPoint;
 
     QVector<QPoint> vertices;
-    QMatrix m;
+    QVector<QVector<bool>> edges;
+
+    QPoint *start, *end;
 
 public:
     Widget(QWidget *parent = 0);
@@ -31,4 +35,5 @@ private:
 
     bool isVertexConcave(const QPolygon &polygon, int index);
     bool lineSegmentsCross(const QPoint &a, const QPoint &b, const QPoint &c, const QPoint &d);
+    bool isLineOfSight(const QPoint &a, const QPoint &b);
 };

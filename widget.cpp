@@ -11,9 +11,16 @@ Widget::Widget(QWidget *parent)
     setMouseTracking(true);
 
     newPoint = 0;
+
+    start = 0;
+    end = new QPoint();
 }
 
 Widget::~Widget() {
+    delete newPoint;
+
+    delete start;
+    delete end;
 }
 
 void Widget::timerEvent(QTimerEvent *) {
@@ -21,10 +28,11 @@ void Widget::timerEvent(QTimerEvent *) {
 }
 
 void Widget::mousePressEvent(QMouseEvent *e) {
-    const static int radius = 8;
-
     if (e->buttons() & Qt::LeftButton) {
-        if (length(newPolygon.first(), e->pos()) <= radius) {
+        delete start;
+        start = 0;
+
+        if (length(newPolygon.first(), e->pos()) <= 2 * circleRadius) {
             if (newPolygon.size() > 2)
                 closePolygon();
         } else {
@@ -33,12 +41,37 @@ void Widget::mousePressEvent(QMouseEvent *e) {
             if (newPolygon.size() == 1)
                 newPoint = new QPoint(e->pos());
         }
+
+        buildVisibilityGraph();
+    } else if (e->buttons() & Qt::RightButton && newPoint == 0) {
+        delete start;
+        start = 0;
+
+        bool append = true;
+
+        foreach (QPolygon polygon, polygons)
+            if (polygon.containsPoint(e->pos(), Qt::WindingFill)) {
+                append = false;
+                break;
+            }
+
+        if (append) {
+            start = new QPoint(e->pos());
+            *end = e->pos();
+        }
+
+        buildVisibilityGraph();
     }
 }
 
 void Widget::mouseMoveEvent(QMouseEvent *e) {
-    if (newPoint)
+    if (newPoint != 0)
         *newPoint = e->pos();
+    else if (start != 0) {
+        *end = e->pos();
+
+        buildVisibilityGraph();
+    }
 }
 
 void Widget::keyPressEvent(QKeyEvent *e) {
@@ -50,6 +83,22 @@ void Widget::keyPressEvent(QKeyEvent *e) {
     case Qt::Key_F11:
         isFullScreen() ? showNormal() : showFullScreen();
         break;
+
+    case Qt::Key_Backspace:
+        delete start;
+        start = 0;
+
+        buildVisibilityGraph();
+        break;
+
+    case Qt::Key_R:
+        delete start;
+        start = 0;
+
+        polygons.clear();
+        vertices.clear();
+        edges.clear();
+        break;
     }
 }
 
@@ -59,10 +108,32 @@ void Widget::paintEvent(QPaintEvent *) {
 
     p.setRenderHint(QPainter::Antialiasing);
 
+    p.setPen(QPen(Qt::gray, 1));
+
+    for (int i = 0; i < vertices.size(); i++)
+        for (int j = i + 1; j < vertices.size(); j++)
+            if (edges[i][j])
+                p.drawLine(vertices[i], vertices[j]);
+
     foreach (QPolygon poly, polygons)
         drawPolygon(poly, &p, Qt::red);
 
     drawPolygon(newPolygon, &p, Qt::blue, true);
+
+    if (start != 0) {
+        p.setPen(QPen(Qt::cyan, 2));
+
+        p.drawLine(*start, *end);
+
+        QPainterPath pp;
+        pp.setFillRule(Qt::WindingFill);
+
+        pp.addEllipse(*start, circleRadius, circleRadius);
+        pp.addEllipse(*end, circleRadius, circleRadius);
+
+        p.fillPath(pp, Qt::green);
+        p.strokePath(pp, QPen(Qt::black, 1));
+    }
 }
 
 double Widget::length(const QPoint &a, const QPoint &b) {
@@ -71,26 +142,23 @@ double Widget::length(const QPoint &a, const QPoint &b) {
 
 void Widget::drawPolygon(const QPolygon &poly, QPainter *p, QColor color, bool connect) {
     QPainterPath linePath, circlePath;
-
     circlePath.setFillRule(Qt::WindingFill);
-
-    const static int radius = 4;
 
     if (!poly.isEmpty()) {
         linePath.moveTo(poly.first());
-        circlePath.addEllipse(poly.first(), radius, radius);
+        circlePath.addEllipse(poly.first(), circleRadius, circleRadius);
     }
 
     for (int i = 1; i < poly.size(); i++) {
         linePath.lineTo(poly.at(i));
-        circlePath.addEllipse(poly.at(i), radius, radius);
+        circlePath.addEllipse(poly.at(i), circleRadius, circleRadius);
     }
 
     if (!poly.isEmpty())
         linePath.lineTo(newPoint && connect ? *newPoint : poly.first());
 
-    if (newPoint)
-        circlePath.addEllipse(*newPoint, radius, radius);
+    if (newPoint != 0)
+        circlePath.addEllipse(*newPoint, circleRadius, circleRadius);
 
     p->strokePath(linePath, QPen(color, 2));
     p->fillPath(circlePath, color.lighter());
@@ -120,11 +188,27 @@ void Widget::closePolygon() {
 
 void Widget::buildVisibilityGraph() {
     vertices.clear();
+    edges.clear();
+
+    if (start != 0)
+        vertices.append(*start);
 
     foreach (QPolygon polygon, polygons)
         for (int i = 0; i < polygon.size(); i++)
             if (isVertexConcave(polygon, i))
                 vertices.append(polygon[i]);
+
+    if (start != 0)
+        vertices.append(*end);
+
+    edges.resize(vertices.size());
+
+    for (int i = 0; i < vertices.size(); i++)
+        edges[i].resize(vertices.size());
+
+    for (int i = 0; i < vertices.size(); i++)
+        for (int j = i; j < vertices.size(); j++)
+            edges[i][j] = edges[j][i] = isLineOfSight(vertices[i], vertices[j]);
 }
 
 bool Widget::isVertexConcave(const QPolygon &polygon, int vertex) {
@@ -156,4 +240,27 @@ bool Widget::lineSegmentsCross(const QPoint &a, const QPoint &b, const QPoint &c
     double s = numerator2 / denominator;
 
     return (r > 0 && r < 1) && (s > 0 && s < 1);
+}
+
+bool Widget::isLineOfSight(const QPoint &a, const QPoint &b) {
+    if (a == b)
+        return false;
+
+    QPolygon containingPolygon;
+
+    foreach (QPolygon polygon, polygons) {
+        if (polygon.contains(a) && polygon.contains(b))
+            containingPolygon = polygon;
+
+        for (int i = 0; i < polygon.size(); i++)
+            if (lineSegmentsCross(polygon[i], polygon[(i + 1) % polygon.size()], a, b))
+                return false;
+    }
+
+    if (!containingPolygon.isEmpty()) {
+        int dist = qAbs(containingPolygon.indexOf(a) - containingPolygon.indexOf(b));
+        return dist == 1 || dist == containingPolygon.size() - 1 || !containingPolygon.containsPoint(QPoint((a.x() + b.x()) / 2, (a.y() + b.y()) / 2), Qt::WindingFill);
+    }
+
+    return true;
 }
