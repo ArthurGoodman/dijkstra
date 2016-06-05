@@ -257,7 +257,7 @@ void Widget::dijkstra() {
     QSet<int> q;
 
     for (int i = 0; i < vertices.size(); i++) {
-        dist.append(INT_MAX);
+        dist.append(INFINITY);
         prev.append(-1);
 
         q.insert(i);
