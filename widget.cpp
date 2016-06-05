@@ -251,7 +251,7 @@ void Widget::dijkstra() {
     dist.clear();
     prev.clear();
 
-    if ((start != 0 && *start == *end))
+    if (start != 0 && *start == *end)
         return;
 
     QSet<int> q;
